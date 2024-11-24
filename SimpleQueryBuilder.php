@@ -25,13 +25,12 @@ class SimpleQueryBuilder
      * @param string|integer|array|null|boolean $value 省略可
      * @return SimpleQueryBuilder
      */
-    public function __construct(string $column = null, string $operator = null, $value = 0): SimpleQueryBuilder
+    public function __construct(string $column = null, string $operator = null, $value = 0)
     {
         if (!is_null($column) && !is_null($operator) && $value !== 0) {
             // 条件を登録
             $this->where($column, $operator, $value);
         }
-        return $this;
     }
 
     /**
@@ -40,7 +39,7 @@ class SimpleQueryBuilder
      * @param string $sql
      * @return SimpleQueryBuilder
      */
-    protected function from(string $tableName): SimpleQueryBuilder
+    public function from(string $tableName): SimpleQueryBuilder
     {
         $this->tableName = $tableName;
         return $this;
