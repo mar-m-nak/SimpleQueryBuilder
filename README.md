@@ -7,7 +7,7 @@
 $simpleQueryBuilder = new SimpleQueryBuilder();
 $sql = simpleQueryBuilder
     ->from('table_books')
-    ->where->('author', '=', ['桜玉吉', '竹本泉'])
+    ->where('author', '=', ['桜玉吉', '竹本泉'])
     ->andWhere('year', '>=', 1990)
     ->order('author')->order('year', 'DESC')
     ->build();    
