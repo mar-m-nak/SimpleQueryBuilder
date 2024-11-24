@@ -10,6 +10,8 @@ class SimpleQueryBuilder
 
     private $tableName = '';
     private $selectColumns = [];
+    private $insertColumns = [];
+    private $updateColumns = [];
     private $join = [];
     private $wheres = [];
     private $orders = [];
@@ -123,7 +125,7 @@ class SimpleQueryBuilder
     }
 
     /**
-     * カラム・演算子・値 を Where 条件文として整形して返す
+     * カラムと値を演算子で繋いだ文字列を返す
      *
      * @param string $column
      * @param string $operator
@@ -230,6 +232,18 @@ class SimpleQueryBuilder
     }
 
     /**
+     * 登録カラムをクリア
+     *
+     * @return void
+     */
+    private function clearColumns()
+    {
+        $this->selectColumns = [];
+        $this->insertColumns = [];
+        $this->updateColumns = [];
+    }
+
+    /**
      * Select するカラムを登録
      *
      * @param string|array $columns
@@ -237,12 +251,40 @@ class SimpleQueryBuilder
      */
     public function select($columns): SimpleQueryBuilder
     {
-        $this->selectColumns = [];
+        $this->clearColumns();
         if (is_string($columns)) {
             $this->selectColumns[] = $columns;
         }
         if (is_array($columns)) {
             $this->selectColumns = $columns;
+        }
+        return $this;
+    }
+
+    /**
+     * Update カラムと値を登録
+     *
+     * @param string $tableName
+     * @param array|string $columns
+     * @param array|string $values 数値も文字列で e.g. '`data` + 1'
+     * @return SimpleQueryBuilder
+     */
+    public function update(string $tableName, $columns, $values): SimpleQueryBuilder
+    {
+        $this->clearColumns();
+        $this->tableName = $tableName;
+        if ((is_string($columns) && is_string($values))) {
+            $columns = [$columns];
+            $values = [$values];
+        }
+        if ((is_array($columns) && is_array($values)) && (count($columns) == count($values))) {
+            foreach ($columns as $key => $column) {
+                $value = $values[$key];
+                if (!is_string($value)) {
+                    continue;
+                }
+                $this->updateColumns[strval($column)] = $value;
+            }
         }
         return $this;
     }
@@ -254,25 +296,60 @@ class SimpleQueryBuilder
      */
     public function build(): string
     {
-        if ($this->tableName === '' || empty($this->selectColumns)) {
+        var_dump($this->tableName, $this->updateColumns);
+        if (
+            $this->tableName === '' ||
+            (
+                empty($this->selectColumns) &&
+                empty($this->insertColumns) &&
+                empty($this->updateColumns)
+            )
+        ) {
             trigger_error('簡易クエリビルダ―エラー：テーブル名またはカラムが指定されていません', E_USER_ERROR);
             exit(1);
         }
-        // SQL組み立て
-        $sql = "SELECT\n" . implode(",\n", $this->selectColumns) . "\nFROM {$this->tableName}\n";
-        if (!empty($this->join)) {
-            foreach ($this->join as $join) {
-                $sql .= "JOIN {$join['type']} {$join['cond']}\n";
+
+        $concatenationJoin = function() {
+            if (empty($this->join)) {
+                return '';
             }
+            $joins = [];
+            foreach ($this->join as $join) {
+                $joins[] = "JOIN {$join['type']} {$join['cond']}";
+            }
+            return implode(",\n", $joins) . "\n";
+        };
+
+        // SQL組み立て
+        if ($this->selectColumns) {
+            $sql = "SELECT\n" . implode(",\n", $this->selectColumns) . "\nFROM {$this->tableName}\n";
+            $sql .= $concatenationJoin();
+            if (!empty($this->wheres)) {
+                $sql .= "WHERE\n" . $this->buildWheres($this->wheres);
+            }
+            if (!empty($this->orders)) {
+                $sql .= 'ORDER BY ' . $this->buildOrders();
+            }
+            $sql .= $this->limit;
+            $sql .= $this->offset;
+            $sql .= ';';
         }
-        if (!empty($this->wheres)) {
-            $sql .= "WHERE\n" . $this->buildWheres($this->wheres);
+
+        if ($this->updateColumns) {
+            $sql = "UPDATE {$this->tableName}\n";
+            $sql .= $concatenationJoin();
+            $sql .= "SET\n";
+            $columnAndValues = [];
+            foreach ($this->updateColumns as $column => $value) {
+                $columnAndValues[] = "{$column} '=' {$value}";
+            }
+            $sql .= implode(",\n", $columnAndValues) . "\n";
+            if (!empty($this->wheres)) {
+                $sql .= "WHERE\n" . $this->buildWheres($this->wheres);
+            }
+            $sql .= ';';
         }
-        if (!empty($this->orders)) {
-            $sql .= 'ORDER BY ' . $this->buildOrders();
-        }
-        $sql .= $this->limit;
-        $sql .= $this->offset;
+
 
         return $sql;
     }
