@@ -11,11 +11,11 @@ class SimpleQueryBuilder
 {
 
     private $tableName = '';
+    private $join = [];
     private $selectColumns = [];
     private $insertColumns = [];
     private $updateColumns = [];
     private $deleteTable = '';
-    private $join = [];
     private $wheres = [];
     private $orders = [];
     private $limit = '';
@@ -233,16 +233,20 @@ class SimpleQueryBuilder
     }
 
     /**
-     * 登録カラムをクリア
+     * SQL文登録用メンバ変数をクリア
      *
      * @return void
      */
-    private function clearColumns()
+    private function clearStatements()
     {
         $this->selectColumns = [];
         $this->insertColumns = [];
         $this->updateColumns = [];
         $this->deleteTable = '';
+        $this->wheres = [];
+        $this->orders = [];
+        $this->limit = '';
+        $this->offset = '';
     }
 
     /**
@@ -253,7 +257,7 @@ class SimpleQueryBuilder
      */
     public function select($columns): SimpleQueryBuilder
     {
-        $this->clearColumns();
+        $this->clearStatements();
         if (is_string($columns)) {
             $this->selectColumns[] = $columns;
         }
@@ -279,7 +283,7 @@ class SimpleQueryBuilder
         array $values,
         bool $doCastAndEscape = true
     ): SimpleQueryBuilder {
-        $this->clearColumns();
+        $this->clearStatements();
         $this->tableName = $tableName;
         if (count($columns) != count($values)) {
             return $this;
@@ -308,7 +312,7 @@ class SimpleQueryBuilder
      */
     public function insert(string $tableName, array $columns, array ...$values): SimpleQueryBuilder
     {
-        $this->clearColumns();
+        $this->clearStatements();
         $this->tableName = $tableName;
         // 要素数チェック
         $countColumns = count($columns);
@@ -337,7 +341,7 @@ class SimpleQueryBuilder
      */
     public function delete(string $tableName): SimpleQueryBuilder
     {
-        $this->clearColumns();
+        $this->clearStatements();
         $this->deleteTable = $tableName;
         $this->tableName = $tableName;
         return $this;
@@ -402,7 +406,7 @@ class SimpleQueryBuilder
         // SQL組み立て
         $sql = '';
         if ($this->selectColumns) {
-            $sql = "SELECT\n" . implode(",\n", $this->selectColumns) . "\nFROM `{$this->tableName}`\n";
+            $sql = "SELECT\n" . implode(",\n", $this->selectColumns) . "\nFROM {$this->tableName}\n";
             $sql .= $concatenationJoin();
             if (!empty($this->wheres)) {
                 $sql .= "WHERE\n" . $this->buildWheres($this->wheres);
@@ -416,7 +420,7 @@ class SimpleQueryBuilder
         }
 
         if ($this->updateColumns) {
-            $sql = "UPDATE `{$this->tableName}`\n";
+            $sql = "UPDATE {$this->tableName}\n";
             $sql .= $concatenationJoin();
             $sql .= "SET\n";
             $columnAndValues = [];
@@ -431,7 +435,7 @@ class SimpleQueryBuilder
         }
 
         if ($this->insertColumns) {
-            $sql = "INSERT INTO `{$this->tableName}`\n";
+            $sql = "INSERT INTO {$this->tableName}\n";
             $sql .= '(' . implode(", ", $this->insertColumns['columns']) . ")\n";
             $sql .= "VALUES\n";
             $oneValues = [];
@@ -443,7 +447,7 @@ class SimpleQueryBuilder
         }
 
         if ($this->deleteTable) {
-            $sql = "DELETE FROM `{$this->tableName}`\n";
+            $sql = "DELETE FROM {$this->tableName}\n";
             $sql .= $concatenationJoin();
             if (!empty($this->wheres)) {
                 $sql .= "WHERE\n" . $this->buildWheres($this->wheres);
