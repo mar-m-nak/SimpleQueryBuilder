@@ -14,7 +14,7 @@ class SimpleQueryBuilder
     private $selectColumns = [];
     private $insertColumns = [];
     private $updateColumns = [];
-    private $deleteTable = ''; // TODO: ここから
+    private $deleteTable = '';
     private $join = [];
     private $wheres = [];
     private $orders = [];
@@ -459,7 +459,7 @@ class SimpleQueryBuilder
      *
      * @return array
      */
-    public function get(): array
+    public function exec(): array
     {
         $sql = $this->build();
         // TODO: ここでDB問い合わせ、適当に返す
