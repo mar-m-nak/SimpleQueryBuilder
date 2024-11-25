@@ -14,6 +14,7 @@ class SimpleQueryBuilder
     private $selectColumns = [];
     private $insertColumns = [];
     private $updateColumns = [];
+    private $deleteTable = ''; // TODO: ここから
     private $join = [];
     private $wheres = [];
     private $orders = [];
@@ -241,6 +242,7 @@ class SimpleQueryBuilder
         $this->selectColumns = [];
         $this->insertColumns = [];
         $this->updateColumns = [];
+        $this->deleteTable = '';
     }
 
     /**
@@ -328,6 +330,20 @@ class SimpleQueryBuilder
     }
 
     /**
+     * Delete テーブル名を登録
+     *
+     * @param string $tableName
+     * @return SimpleQueryBuilder
+     */
+    public function delete(string $tableName): SimpleQueryBuilder
+    {
+        $this->clearColumns();
+        $this->deleteTable = $tableName;
+        $this->tableName = $tableName;
+        return $this;
+    }
+
+    /**
      * 引数を文字列化して返す
      * - string: そのまま
      * - int: 文字列化
@@ -364,7 +380,8 @@ class SimpleQueryBuilder
             (
                 empty($this->selectColumns) &&
                 empty($this->insertColumns) &&
-                empty($this->updateColumns)
+                empty($this->updateColumns) &&
+                empty($this->deleteTable)
             )
         ) {
             trigger_error('簡易クエリビルダ―エラー: テーブル名またはカラムが指定されていません', E_USER_ERROR);
@@ -422,6 +439,15 @@ class SimpleQueryBuilder
                 $oneValues[] = '(' . implode(", ", $oneValue) . ")";
             }
             $sql .= implode(",\n", $oneValues) . "\n";
+            $sql .= ';';
+        }
+
+        if ($this->deleteTable) {
+            $sql = "DELETE FROM `{$this->tableName}`\n";
+            $sql .= $concatenationJoin();
+            if (!empty($this->wheres)) {
+                $sql .= "WHERE\n" . $this->buildWheres($this->wheres);
+            }
             $sql .= ';';
         }
 
