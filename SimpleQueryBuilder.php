@@ -2,6 +2,8 @@
 
 namespace YourProperNameSpace;
 
+use mysqli;
+
 /**
  * 簡易クエリビルダ―
  */
@@ -134,10 +136,8 @@ class SimpleQueryBuilder
      */
     private function makeCond(string $column, string $operator, $value): string
     {
-        if (is_string($value)) {
-            return "{$column} {$operator} '" . self::escapeString($value) . "'";
-        } elseif (is_int($value)) { // TODO: x86系では 2147483648 以上NG
-            return "{$column} {$operator} {$value}";
+        if (is_string($value) || is_int($value)) {
+            return "{$column} {$operator} " . self::castToStrOrInt($value);
         } elseif (is_null($value)) {
             $operator = $operator === '=' ? 'IS' : $operator;
             $operator = in_array($operator, ['!=', '<>'], true) ? 'IS NOT' : $operator;
@@ -263,31 +263,94 @@ class SimpleQueryBuilder
 
     /**
      * Update カラムと値を登録
+     * - 値に計算を含む場合は手動でエスケープしたうえで文字列で登録し、第3引数にfalseを指定。 e.g. "'data' + 1"
      *
      * @param string $tableName
-     * @param array|string $columns
-     * @param array|string $values 数値も文字列で e.g. '`data` + 1'
+     * @param array $columns ['clm1', 'clm2', ...]
+     * @param array $values ['val1', 'val2', ... ]
+     * @param boolean $doCastAndEscape 値を文字列/数値へキャスト＆エスケープする (省略=true)
      * @return SimpleQueryBuilder
      */
-    public function update(string $tableName, $columns, $values): SimpleQueryBuilder
-    {
+    public function update(
+        string $tableName,
+        array $columns,
+        array $values,
+        bool $doCastAndEscape = true
+    ): SimpleQueryBuilder {
         $this->clearColumns();
         $this->tableName = $tableName;
-        if ((is_string($columns) && is_string($values))) {
-            $columns = [$columns];
-            $values = [$values];
+        if (count($columns) != count($values)) {
+            return $this;
         }
-        if ((is_array($columns) && is_array($values)) && (count($columns) == count($values))) {
-            foreach ($columns as $key => $column) {
-                $value = $values[$key];
-                if (!is_string($value)) {
-                    continue;
-                }
-                $this->updateColumns[strval($column)] = $value;
+        foreach ($columns as $key => $column) {
+            $value = $doCastAndEscape ? self::castToStrOrInt($values[$key]) : $values[$key];
+            if (!$doCastAndEscape && !is_string($value)) {
+                trigger_error(
+                    '簡易クエリビルダ―エラー: update()の値に文字列型以外を指定する場合は第3引数にtrueを指定してください',
+                    E_USER_ERROR
+                );
+                exit(1);
             }
+            $this->updateColumns[strval($column)] = $value;
         }
         return $this;
     }
+
+    /**
+     * Insert カラムと値を登録
+     *
+     * @param string $tableName
+     * @param array $columns ['clm1', 'clm2', ...]
+     * @param array ...$values ['val1a', 'val2a', ... ], ['val1b', 'val2b', ... ], ...
+     * @return SimpleQueryBuilder
+     */
+    public function insert(string $tableName, array $columns, array ...$values): SimpleQueryBuilder
+    {
+        $this->clearColumns();
+        $this->tableName = $tableName;
+        // 要素数チェック
+        $countColumns = count($columns);
+        foreach ($values as $oneValues) {
+            if ($countColumns != count($oneValues)) {
+                trigger_error('簡易クエリビルダ―エラー: insert()のカラムと値の要素数を揃えてください', E_USER_ERROR);
+                exit(1);
+            }
+        }
+        // 登録
+        $this->insertColumns['columns'] = $columns;
+        foreach ($values as $key1 => $oneValues) {
+            foreach ($oneValues as $key2 => $value) {
+                $values[$key1][$key2] = self::castToStrOrInt($value);
+            }
+        }
+        $this->insertColumns['values'] = $values;
+        return $this;
+    }
+
+    /**
+     * 引数を文字列化して返す
+     * - string: そのまま
+     * - int: 文字列化
+     * - bool: 'TRUE' / 'FALSE'
+     * - null: 'NULL'
+     *
+     * @param string|integer|boolean|null $value
+     * @return string|integer
+     */
+    private static function castToStrOrInt($value)
+    {
+        if (is_string($value)) {
+            return "'" . self::escapeString($value) . "'";
+        } elseif (is_int($value)) { // TODO: x86系では 2147483648 以上NG
+            return strval($value);
+        } elseif (is_null($value)) {
+            return 'NULL';
+        } elseif (is_bool($value)) {
+            return $value ? 'TRUE' : 'FALSE';
+        }
+        return '';
+    }
+
 
     /**
      * SQLを組み立てて返す
@@ -296,7 +359,6 @@ class SimpleQueryBuilder
      */
     public function build(): string
     {
-        var_dump($this->tableName, $this->updateColumns);
         if (
             $this->tableName === '' ||
             (
@@ -305,11 +367,11 @@ class SimpleQueryBuilder
                 empty($this->updateColumns)
             )
         ) {
-            trigger_error('簡易クエリビルダ―エラー：テーブル名またはカラムが指定されていません', E_USER_ERROR);
+            trigger_error('簡易クエリビルダ―エラー: テーブル名またはカラムが指定されていません', E_USER_ERROR);
             exit(1);
         }
 
-        $concatenationJoin = function() {
+        $concatenationJoin = function () {
             if (empty($this->join)) {
                 return '';
             }
@@ -321,8 +383,9 @@ class SimpleQueryBuilder
         };
 
         // SQL組み立て
+        $sql = '';
         if ($this->selectColumns) {
-            $sql = "SELECT\n" . implode(",\n", $this->selectColumns) . "\nFROM {$this->tableName}\n";
+            $sql = "SELECT\n" . implode(",\n", $this->selectColumns) . "\nFROM `{$this->tableName}`\n";
             $sql .= $concatenationJoin();
             if (!empty($this->wheres)) {
                 $sql .= "WHERE\n" . $this->buildWheres($this->wheres);
@@ -336,12 +399,12 @@ class SimpleQueryBuilder
         }
 
         if ($this->updateColumns) {
-            $sql = "UPDATE {$this->tableName}\n";
+            $sql = "UPDATE `{$this->tableName}`\n";
             $sql .= $concatenationJoin();
             $sql .= "SET\n";
             $columnAndValues = [];
             foreach ($this->updateColumns as $column => $value) {
-                $columnAndValues[] = "{$column} '=' {$value}";
+                $columnAndValues[] = "{$column} = {$value}";
             }
             $sql .= implode(",\n", $columnAndValues) . "\n";
             if (!empty($this->wheres)) {
@@ -350,6 +413,17 @@ class SimpleQueryBuilder
             $sql .= ';';
         }
 
+        if ($this->insertColumns) {
+            $sql = "INSERT INTO `{$this->tableName}`\n";
+            $sql .= '(' . implode(", ", $this->insertColumns['columns']) . ")\n";
+            $sql .= "VALUES\n";
+            $oneValues = [];
+            foreach ($this->insertColumns['values'] as $oneValue) {
+                $oneValues[] = '(' . implode(", ", $oneValue) . ")";
+            }
+            $sql .= implode(",\n", $oneValues) . "\n";
+            $sql .= ';';
+        }
 
         return $sql;
     }
