@@ -2,8 +2,6 @@
 
 namespace YourProperNameSpace;
 
-use mysqli;
-
 /**
  * 簡易クエリビルダ―
  */
