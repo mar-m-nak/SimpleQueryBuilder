@@ -398,7 +398,7 @@ class SimpleQueryBuilder
             foreach ($this->join as $join) {
                 $joins[] = "JOIN {$join['type']} {$join['cond']}";
             }
-            return implode(",\n", $joins) . "\n";
+            return implode("\n", $joins) . "\n";
         };
 
         // SQL組み立て
