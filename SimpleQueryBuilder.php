@@ -396,7 +396,7 @@ class SimpleQueryBuilder
             }
             $joins = [];
             foreach ($this->join as $join) {
-                $joins[] = "JOIN {$join['type']} {$join['cond']}";
+                $joins[] = "{$join['type']} JOIN {$join['cond']}";
             }
             return implode("\n", $joins) . "\n";
         };
